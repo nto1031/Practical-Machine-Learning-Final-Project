@@ -1,0 +1,122 @@
+---
+title: 'Practical Machine Learning: Final Project'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.  We will use the prediction model to predict 20 different test cases and report the results.  
+
+```{r, echo=FALSE, results='hide', include=FALSE}
+# Load Packages #
+if (!require("caret")){install.packages("caret", dependencies = TRUE)}
+library("caret")
+
+if(!require("rpart")){install.packages("rpart")}
+library("rpart")
+
+if(!require("rattle")){install.packages("rattle")}
+library("rattle")
+
+if(!require("randomForest")){install.packages("randomForest")}
+library("randomForest")
+
+training_URL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testing_URL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Get training and testing data #
+download.file(training_URL, destfile = "training_data.csv")
+training <- read.csv("training_data.csv", na.strings = c("NA","#DIV/0!",""))
+
+download.file(testing_URL, "testing_data.csv")
+testing <- read.csv("testing_data.csv", na.strings = c("NA","#DIV/0!",""))
+
+```
+
+## Model Selection
+
+For this assignment, we will use a random forest model for its accuracy in classification.
+
+## Cross Validation
+
+The data was split into a training and testing set.  Using the createDataPartition function in the caret package, 70% of the data was assigned to training and 30% was assigned to testing.
+
+```{r}
+# Dvide Training further into a testing & training #
+set.seed(9999)
+inTrain <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+train_data <- training[inTrain, ]
+test_data <- training[-inTrain, ]
+```
+
+
+## Cleaning the Data
+
+First, we will remove near-zero variance predictors from the model with the following thresholds:  frequency cutoff of 95/5 and uniqueness cutoff of 10.  We will also remove variables that have over 90% null values in their observations.  Finally, we will remove the date and timestamp variables.  The remaining predictors will be used to train the model.
+
+```{r, echo=TRUE}
+# Clean the Data #
+  
+  #remove near zero variance variables #
+  nzv1 <- nearZeroVar(train_data, saveMetrics = TRUE)
+  nzv_train <- train_data[ ,nzv1$nzv == FALSE]
+  nzv_test <- test_data[ , nzv1$nzv == FALSE]
+  
+  #Find feilds with over 90% NAs #
+  mostlyna <- c()
+  for(i in 1:ncol(nzv_train)){
+    
+    if(sum(is.na(nzv_train[ , i]))/nrow(nzv_train) > 0.9 ){
+      
+      ifelse(is.null(mostlyna), mostlyna <- c(i),  mostlyna <- c(mostlyna, i))
+      
+    }
+    
+  }
+  
+  rmna_train <- nzv_train[ , -mostlyna]
+  rmna_test <- nzv_test[ , -mostlyna]
+  
+  ## Romve unnecessary predictors ##
+  myTrain <- rmna_train[ , c(2, 6:ncol(rmna_train))]
+  myTest <- rmna_test[, c(2, 6:ncol(rmna_test))]
+  
+```
+## Expected Out of Sample Error
+
+I expected a highly accurate model with an out of sample error of less than 1%.  This expectation was born true in the results of our predictions on the testing data.  See the results below.
+
+# Random Forest Model
+
+## Model
+```{r}
+
+## Random Forest model ##
+
+set.seed(9999)
+rf_mod <- randomForest(classe ~ . , data = myTrain)
+predict_rf <- predict(rf_mod, myTest, type = "class")
+
+```
+
+## Confusion Matrix
+```{r}
+CM_rf <- confusionMatrix(predict_rf, myTest$classe)
+print(CM_rf)
+plot(CM_rf$table, col = CM_rf$byClass, main = paste("Confusion Matrix: Accuracy =", round(CM_rf$overall['Accuracy'], 3)))
+```
+
+# Prediction with Test Cases
+
+```{r}
+predict_test <- predict(rf_mod, testing, type = "class")
+print(predict_test)  
+
+```
+
